@@ -98,7 +98,7 @@ if __name__ == "__main__":
 
     # Set up command line argument parser
     parser = ArgumentParser(description="Training script parameters")
-    parser.add_argument('--source_paths', '-s', required=True, nargs="+", type=str, default=[])
+    # parser.add_argument('--source_paths', '-s', required=True, nargs="+", type=str, default=[])
     parser.add_argument('--model_paths', '-m', required=True, nargs="+", type=str, default=[])
     parser.add_argument("--iteration", default=-1, type=int)
     args = parser.parse_args()

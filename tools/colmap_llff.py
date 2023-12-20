@@ -172,8 +172,8 @@ def pipeline(scene, base_path, n_views):
     with open('created/points3D.txt', "w") as fid:
         pass
 
-    res = os.popen( 'colmap feature_extractor --database_path database.db --image_path images  --SiftExtraction.max_image_size 4032 --SiftExtraction.max_num_features 32768 --SiftExtraction.estimate_affine_shape 1 --SiftExtraction.domain_size_pooling 1').read()
-    os.system( 'colmap exhaustive_matcher --database_path database.db --SiftMatching.guided_matching 1 --SiftMatching.max_num_matches 32768')
+    res = os.popen( 'colmap feature_extractor --database_path database.db --image_path images --SiftExtraction.use_gpu false --SiftExtraction.max_image_size 4032 --SiftExtraction.max_num_features 32768 --SiftExtraction.estimate_affine_shape 1 --SiftExtraction.domain_size_pooling 1').read()
+    os.system( 'colmap exhaustive_matcher --database_path database.db --SiftMatching.guided_matching 1 --SiftMatching.max_num_matches 32768 --SiftMatching.use_gpu false')
     db = COLMAPDatabase.connect('database.db')
     db_images = db.execute("SELECT * FROM images")
     img_rank = [db_image[1] for db_image in db_images]
@@ -191,6 +191,6 @@ def pipeline(scene, base_path, n_views):
     os.system('colmap stereo_fusion --workspace_path dense --output_path dense/fused.ply')
 
 
-for scene in ['fern', 'flower', 'fortress',  'horns',  'leaves',  'orchids',  'room',  'trex']:# ['bonsai', 'counter', 'garden', 'kitchen', 'room', 'stump']:
-    pipeline(scene, base_path = 'dataset/nerf_llff_data/', n_views = 3)
+for scene in ['flower', 'fortress',  'horns',  'leaves',  'orchids',  'room',  'trex']:# ['bonsai', 'counter', 'garden', 'kitchen', 'room', 'stump']: 'fern', 'flower', 'fortress',  'horns',  'leaves',  'orchids',  'room',  'trex'
+    pipeline(scene, base_path = '/home/data/chenkanghao/codebase/FSGS/dataset/nerf_llff_data/', n_views = 3)
 

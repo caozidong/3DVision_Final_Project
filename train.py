@@ -33,6 +33,8 @@ from utils.image_utils import psnr
 from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
 from lpipsPyTorch import lpips
+from utils.depth_utils import tof_simulator
+
 
 
 def training(dataset, opt, pipe, args):
@@ -101,35 +103,47 @@ def training(dataset, opt, pipe, args):
             pseudo_stack = scene.getPseudoCameras().copy()
         pseudo_cam = pseudo_stack.pop(randint(0, len(pseudo_stack) - 1))
 
-        rendered_depth = render_pkg["depth"][0]
-        midas_depth = torch.tensor(viewpoint_cam.depth_image).cuda()
-        rendered_depth = rendered_depth.reshape(-1, 1)
-        midas_depth = midas_depth.reshape(-1, 1)
 
-        depth_loss = min(
-                        (1 - pearson_corrcoef( - midas_depth, rendered_depth)),
-                        (1 - pearson_corrcoef(1 / (midas_depth + 200.), rendered_depth))
-        )
-        loss += args.depth_weight * depth_loss
+        if args.depth_weight > 0:
+            rendered_depth = render_pkg["depth"][0]
+            midas_depth = torch.tensor(viewpoint_cam.depth_image).cuda()
+            rendered_depth = rendered_depth.reshape(-1, 1)
+            
+            lq_rendered_depth = render_pkg["lq_depth"][0]
+            lq_rendered_depth = torch.nn.functional.interpolate(lq_rendered_depth[None,None,...], size=[midas_depth.shape[0], midas_depth.shape[1]], mode="bilinear")
+            lq_rendered_depth = lq_rendered_depth / lq_rendered_depth.max()
+            lq_rendered_depth = lq_rendered_depth.reshape(-1, 1)
+            midas_depth = midas_depth.reshape(-1, 1)
+            # depth_loss = min(
+            #                 (1 - pearson_corrcoef( - midas_depth, rendered_depth)),
+            #                 (1 - pearson_corrcoef(1 / (midas_depth + 200.), rendered_depth))
+            # )
+            # loss += args.depth_weight * depth_loss
 
-        if iteration > args.end_sample_pseudo:
-            args.depth_weight = 0.001
+            depth_loss = min(
+                            (1 - pearson_corrcoef( - midas_depth, lq_rendered_depth)),
+                            (1 - pearson_corrcoef(1 / (midas_depth + 200.), lq_rendered_depth))
+            )
+            loss += args.depth_weight * depth_loss
+        
+            if iteration > args.end_sample_pseudo:
+                args.depth_weight = 0.001
 
+        # if args.depth_pseudo_weight > 0:
 
+        #     if iteration > args.start_sample_pseudo and iteration < args.end_sample_pseudo:
 
-        if iteration > args.start_sample_pseudo and iteration < args.end_sample_pseudo:
+        #         render_pkg_pseudo = render(pseudo_cam, gaussians, pipe, background)
+        #         rendered_depth_pseudo = render_pkg_pseudo["depth"][0]
+        #         midas_depth_pseudo = estimate_depth(render_pkg_pseudo["render"], mode='train')
 
-            render_pkg_pseudo = render(pseudo_cam, gaussians, pipe, background)
-            rendered_depth_pseudo = render_pkg_pseudo["depth"][0]
-            midas_depth_pseudo = estimate_depth(render_pkg_pseudo["render"], mode='train')
+        #         rendered_depth_pseudo = rendered_depth_pseudo.reshape(-1, 1)
+        #         midas_depth_pseudo = midas_depth_pseudo.reshape(-1, 1)
+        #         depth_loss_pseudo = (1 - pearson_corrcoef(rendered_depth_pseudo, -midas_depth_pseudo)).mean()
 
-            rendered_depth_pseudo = rendered_depth_pseudo.reshape(-1, 1)
-            midas_depth_pseudo = midas_depth_pseudo.reshape(-1, 1)
-            depth_loss_pseudo = (1 - pearson_corrcoef(rendered_depth_pseudo, -midas_depth_pseudo)).mean()
-
-            if torch.isnan(depth_loss_pseudo).sum() == 0:
-                loss_scale = min((iteration - args.start_sample_pseudo) / 500., 1)
-                loss += loss_scale * args.depth_pseudo_weight * depth_loss_pseudo
+        #         if torch.isnan(depth_loss_pseudo).sum() == 0:
+        #             loss_scale = min((iteration - args.start_sample_pseudo) / 500., 1)
+        #             loss += loss_scale * args.depth_pseudo_weight * depth_loss_pseudo
 
 
         loss.backward()

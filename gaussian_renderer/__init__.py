@@ -101,6 +101,42 @@ def render(viewpoint_camera, pc, pipe, bg_color : torch.Tensor, scaling_modifier
         rotations = rotations,
         cov3D_precomp = cov3D_precomp)
 
+
+    # filter the gaussian point with scales larger than theta
+    scales_norm = scales.data.norm(dim=1)
+    # theta = scales_norm.mean()
+    # filter_idx = scales_norm > theta
+    k = int(0.8 * scales_norm.numel())
+    topk_values, _ = torch.topk(scales_norm.view(-1), k)
+    threshold = topk_values[-1]
+    filter_idx = scales_norm > threshold
+    lq_raster_settings = GaussianRasterizationSettings(
+        image_height=int(viewpoint_camera.image_height),
+        image_width=int(viewpoint_camera.image_width),
+        tanfovx=tanfovx,
+        tanfovy=tanfovy,
+        bg = bg_color, #torch.tensor([1., 1., 1.]).cuda() if white_bg else torch.tensor([0., 0., 0.]).cuda(), #bg_color,
+        scale_modifier=scaling_modifier,
+        viewmatrix=viewpoint_camera.world_view_transform,
+        projmatrix=viewpoint_camera.full_proj_transform,
+        sh_degree=pc.active_sh_degree,
+        campos=viewpoint_camera.camera_center,
+        prefiltered=False,
+        debug=pipe.debug,
+        confidence=confidence if confidence.shape[0] == 0 else confidence[filter_idx]
+    )
+
+    lq_rasterizer = GaussianRasterizer(raster_settings=lq_raster_settings)
+    _, _, lq_depth, _ = lq_rasterizer(
+        means3D = means3D[filter_idx],
+        means2D = means2D[filter_idx],
+        shs = shs[filter_idx],
+        colors_precomp = None if colors_precomp is None else colors_precomp[filter_idx],
+        opacities = opacity[filter_idx],
+        scales = scales[filter_idx],
+        rotations = rotations[filter_idx],
+        cov3D_precomp = None if cov3D_precomp is None else cov3D_precomp[filter_idx])
+
     # rendered_image_list, depth_list, alpha_list = [], [], []
     # for i in range(5):
     #     rendered_image, radii, depth, alpha = rasterizer(
@@ -129,4 +165,5 @@ def render(viewpoint_camera, pc, pipe, bg_color : torch.Tensor, scaling_modifier
             "viewspace_points": screenspace_points,
             "visibility_filter" : radii > 0,
             "radii": radii,
-            "depth": depth}
+            "depth": depth,
+            "lq_depth": lq_depth}
