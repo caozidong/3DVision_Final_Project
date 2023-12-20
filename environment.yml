@@ -1,4 +1,4 @@
-name: FSGS
+name: tofgs
 channels:
   - pytorch
   - conda-forge
